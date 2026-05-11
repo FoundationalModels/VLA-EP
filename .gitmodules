@@ -1,0 +1,9 @@
+[submodule "open-pi-zero"]
+	path = open-pi-zero
+	url = https://github.com/FoundationalModels/open-pi-zero.git
+[submodule "openvla-mini"]
+	path = openvla-mini
+	url = https://github.com/FoundationalModels/openvla-mini.git
+[submodule "openvla-probe"]
+	path = openvla-probe
+	url = https://github.com/helenlu66/openvla-probe.git
