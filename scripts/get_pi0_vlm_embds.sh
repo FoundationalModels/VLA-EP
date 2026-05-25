@@ -32,11 +32,12 @@ PI_ZERO_DIR="$REPO_DIR/open-pi-zero"
 VENV="$PI_ZERO_DIR/.venv"
 PY_SCRIPT="$PI_ZERO_DIR/scripts/get_pi0_vlm_embds.py"
 
-REF_EXP_PATH="$REPO_DIR/media/ref_exp.json"
+REF_EXP_PATH="$REPO_DIR/media/ref_exp.jsonc"
 IMAGE_BASE_DIR="$REPO_DIR/media"
-OUTPUT_DIR="$REPO_DIR/embeddings"
+OUTPUT_DIR="$REPO_DIR/embeddings/pi0"
 PRETRAINED_MODEL_PATH=""
 CHECKPOINT_PATH=""
+TASKS_ARG=""
 DEVICE="cuda"
 USE_BF16_FLAG=""
 
@@ -49,6 +50,11 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --pretrained_model_path) PRETRAINED_MODEL_PATH="$2"; shift 2 ;;
         --checkpoint_path)       CHECKPOINT_PATH="$2";       shift 2 ;;
+        --tasks)
+            shift
+            while [[ $# -gt 0 && "$1" != --* ]]; do
+                TASKS_ARG="$TASKS_ARG $1"; shift
+            done ;;
         --output_dir)            OUTPUT_DIR="$2";            shift 2 ;;
         --device)                DEVICE="$2";                shift 2 ;;
         --use_bf16)              USE_BF16_FLAG="--use_bf16"; shift   ;;
@@ -102,12 +108,18 @@ if [[ -n "$CHECKPOINT_PATH" ]]; then
     CHECKPOINT_ARG="--checkpoint_path $CHECKPOINT_PATH"
 fi
 
+TASKS_FLAG=""
+if [[ -n "$TASKS_ARG" ]]; then
+    TASKS_FLAG="--tasks $TASKS_ARG"
+fi
+
 python "$PY_SCRIPT" \
-    --ref_exp_path  "$REF_EXP_PATH" \
+    --ref_exp_path   "$REF_EXP_PATH" \
     --image_base_dir "$IMAGE_BASE_DIR" \
-    --output_dir    "$OUTPUT_DIR" \
-    --config_path   "config/train/bridge.yaml" \
-    --device        "$DEVICE" \
+    --output_dir     "$OUTPUT_DIR" \
+    --config_path    "config/train/bridge.yaml" \
+    --device         "$DEVICE" \
     $PRETRAINED_ARG \
     $CHECKPOINT_ARG \
+    $TASKS_FLAG \
     $USE_BF16_FLAG
