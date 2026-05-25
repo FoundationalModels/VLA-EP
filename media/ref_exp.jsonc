@@ -1,0 +1,69 @@
+// Referring expression variants for robotic manipulation tasks (BridgeV2-★ benchmark).
+// Each task has a "base_command" and semantic variants (S-*) drawn from the STAR-Gen
+// taxonomy (Gao et al., 2026). All variants are semantic perturbations — they change
+// the language instruction without changing the required robot behavior.
+//
+// S-PROP  (Object Properties)        — Instruction requires additional knowledge about
+//                                      physical properties of the target object (color,
+//                                      mass, size). e.g., "put the orange object on the plate"
+//
+// S-LANG  (Language Rephrase)        — Simple rephrasing that does not affect underlying
+//                                      behavior; verb synonyms, article removal, etc.
+//                                      e.g., "lift carrot and place on plate"
+//
+// S-MO    (Multi-Object Referencing) — Instruction references spatial relationships between
+//                                      multiple objects (understanding "in", "on", "right").
+//                                      e.g., "put the object that is in the sink on the plate"
+//
+// S-INT   (Internet Knowledge)       — Instruction requires external/world knowledge findable
+//                                      on the internet and not covered by other semantic axes;
+//                                      includes common knowledge, famous nouns, and typos.
+//                                      e.g., "same color as a basketball", "knif" (typo)
+//
+// S-AFF   (Human Affordances)        — Instruction requires knowledge of how humans interact
+//                                      with or use an object (functional affordances).
+//                                      e.g., "the object that can be used for cutting"
+
+{
+  "put_carrot_on_plate": {
+    "image_path": "carrot-knife-base.jpg",
+    "base_command": "put carrot on plate",
+    "variants": {
+      "S-PROP": "put the orange object on the plate",
+      "S-LANG": "lift carrot and place on plate",
+      "S-MO": "put the object that is on the counter on the plate",
+      "S-INT": "put the object that is the same color as a basketball on the plate"
+    }
+  },
+  "put_knife_on_plate": {
+    "image_path": "carrot-knife-base.jpg",
+    "base_command": "put knife on plate",
+    "variants": {
+      "S-PROP": "put the gray and green object on the plate",
+      "S-LANG": "lift knife and place on plate",
+      "S-MO": "put the object that is in the sink on the plate",
+      "S-INT": "put knif on plate"
+      //"S-AFF": "put the object that can be used for cutting on the plate"
+    }
+  },
+  "flip_pot_upright": {
+    "image_path": "pot-plate-base.jpg",
+    "base_command": "flip pot upright which is in sink",
+    "variants": {
+      "S-PROP": "flip the gray object upright which is in sink",
+      "S-LANG": "lift pot upright and place in sink",
+      "S-MO": "flip the object that is in the sink upright",
+      "S-INT": "flip the object that can be used for boiling water upright"
+    }
+  },
+  "put_plate_in_sink": {
+    "image_path": "pot-plate-base.jpg",
+    "base_command": "put plate in sink",
+    "variants": {
+      "S-PROP": "put the pink object in the sink",
+      "S-LANG": "lift plate and place in sink",
+      "S-MO": "put the object that is in the drying rack in the sink",
+      "S-INT": "put plait in sink"
+    }
+  }
+}
