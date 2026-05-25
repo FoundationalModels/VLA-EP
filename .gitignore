@@ -1,4 +1,5 @@
 embeddings/
 .vscode/
+checkpoints/
 rite
 VLA-EP.code-workspace 
