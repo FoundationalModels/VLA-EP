@@ -1,6 +1,15 @@
-embeddings/
-.vscode/
-checkpoints/
-visualization/
+# Ignore all embeddings, checkpoints, and visualization outputs by default. These can be large files that are generated during training and evaluation, and we don't want to accidentally commit them to the repository. If you want to keep specific files, you can add exceptions to this .gitignore file.
+visualizations/*
+!visualizations/.gitkeep
+checkpoints/*
+!checkpoints/.gitkeep
+embeddings/*
+!embeddings/.gitkeep
+
+# Python-related ignores
+__pycache__/
 rite
+
+# IDE files
+.vscode/
 VLA-EP.code-workspace 
