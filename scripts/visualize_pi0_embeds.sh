@@ -11,13 +11,13 @@
 # for all-tasks combined AND for each individual task.
 #
 # Bridge-pretrained checkpoint:
-#   checkpoints/pi0/bridge_beta_step19296_2024-12-26_22-30_42.pt
+#   checkpoints/pi0_pretrained_bridge_beta_step19296_2024-12-26_22-30_42.pt
 #
 # Co-trained checkpoints used per task:
 #   put_carrot_on_plate, put_knife_on_plate:
-#     pi0_bridge+sink_carrot-knife_100000_noaug.pt
+#     checkpoints/pi0_cotrained_bridge+sink_carrot-knife_100000_noaug.pt
 #   flip_pot_upright, put_plate_in_sink:
-#     pi0_bridge+sink_pot-plate_100000_noaug.pt
+#     checkpoints/pi0_cotrained_bridge+sink_pot-plate_100000_noaug.pt
 #
 # Output layout:
 #   visualization/pi0/

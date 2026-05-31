@@ -16,6 +16,8 @@ Use --model to select defaults for each model:
             weight sets: base (PaliGemma) · pre-trained (Pi0 bridge) · co-trained (Pi0 task)
   openvla : emb_types="layer-1_mean layer-1_final"  dirs=embeddings/openvla visualization/openvla
             weight sets: base (Prismatic) · pre-trained (Open-X) · co-trained (finetuned)
+  minivla : emb_types="layer-1_mean layer-1_final"  dirs=embeddings/minivla visualization/minivla
+            weight sets: base (Prismatic) · pre-trained (Bridge) · co-trained (finetuned)
 
 Color scheme (scatter plots):
   co-trained  base instruction  → vivid green,  large marker
@@ -322,7 +324,7 @@ def _render_all_tasks_scatter(ax, X2d, meta, xlabel: str, ylabel: str, title: st
 # ── T-SNE ─────────────────────────────────────────────────────────────────────
 
 def make_tsne_plot(embeddings_dir, task_name, output_dir, emb_type,
-                   suffix_to_label, file_suffixes=None) -> None:
+                   suffix_to_label, model_title, file_suffixes=None) -> None:
     X, meta = collect_embeddings(embeddings_dir, task_name, emb_type,
                                   suffix_to_label, file_suffixes)
     if X is None or len(X) < 2:
@@ -336,12 +338,12 @@ def make_tsne_plot(embeddings_dir, task_name, output_dir, emb_type,
     fig, ax = plt.subplots(figsize=(8, 6))
     _render_scatter(ax, X2d, meta,
                     xlabel="T-SNE 1", ylabel="T-SNE 2",
-                    title=f"{task_name}  ·  {emb_type}  T-SNE")
+                    title=f"{model_title}  ·  {task_name}  ·  {emb_type}  T-SNE")
     _save(fig, output_dir, f"{task_name}_{emb_type}_tsne.png", task_name=task_name)
 
 
 def make_all_tasks_tsne_plot(embeddings_dir, output_dir, emb_type,
-                             suffix_to_label, file_suffixes=None) -> None:
+                             suffix_to_label, model_title, file_suffixes=None) -> None:
     X, meta = collect_all_tasks_embeddings(embeddings_dir, emb_type,
                                             suffix_to_label, file_suffixes)
     if X is None or len(X) < 2:
@@ -356,14 +358,14 @@ def make_all_tasks_tsne_plot(embeddings_dir, output_dir, emb_type,
     fig, ax = plt.subplots(figsize=(10, 8))
     _render_all_tasks_scatter(ax, X2d, meta,
                               xlabel="T-SNE 1", ylabel="T-SNE 2",
-                              title=f"all tasks  ·  {emb_type}  T-SNE")
+                              title=f"{model_title}  ·  all tasks  ·  {emb_type}  T-SNE")
     _save(fig, output_dir, f"all_tasks_{emb_type}_tsne.png", task_name="all_tasks")
 
 
 # ── PCA ───────────────────────────────────────────────────────────────────────
 
 def make_pca_plot(embeddings_dir, task_name, output_dir, emb_type,
-                  suffix_to_label, file_suffixes=None) -> None:
+                  suffix_to_label, model_title, file_suffixes=None) -> None:
     X, meta = collect_embeddings(embeddings_dir, task_name, emb_type,
                                   suffix_to_label, file_suffixes)
     if X is None or len(X) < 2:
@@ -377,12 +379,12 @@ def make_pca_plot(embeddings_dir, task_name, output_dir, emb_type,
     _render_scatter(ax, X2d, meta,
                     xlabel=f"PC1  ({var[0]:.1%} var)",
                     ylabel=f"PC2  ({var[1]:.1%} var)",
-                    title=f"{task_name}  ·  {emb_type}  PCA")
+                    title=f"{model_title}  ·  {task_name}  ·  {emb_type}  PCA")
     _save(fig, output_dir, f"{task_name}_{emb_type}_pca.png", task_name=task_name)
 
 
 def make_all_tasks_pca_plot(embeddings_dir, output_dir, emb_type,
-                            suffix_to_label, file_suffixes=None) -> None:
+                            suffix_to_label, model_title, file_suffixes=None) -> None:
     X, meta = collect_all_tasks_embeddings(embeddings_dir, emb_type,
                                             suffix_to_label, file_suffixes)
     if X is None or len(X) < 2:
@@ -396,14 +398,14 @@ def make_all_tasks_pca_plot(embeddings_dir, output_dir, emb_type,
     _render_all_tasks_scatter(ax, X2d, meta,
                               xlabel=f"PC1  ({var[0]:.1%} var)",
                               ylabel=f"PC2  ({var[1]:.1%} var)",
-                              title=f"all tasks  ·  {emb_type}  PCA")
+                              title=f"{model_title}  ·  all tasks  ·  {emb_type}  PCA")
     _save(fig, output_dir, f"all_tasks_{emb_type}_pca.png", task_name="all_tasks")
 
 
 # ── Cosine similarity heatmap ─────────────────────────────────────────────────
 
 def make_cosim_plot(embeddings_dir, task_name, output_dir, emb_type,
-                    suffix_to_label, file_suffixes=None) -> None:
+                    suffix_to_label, model_title, file_suffixes=None) -> None:
     X, meta = collect_embeddings(embeddings_dir, task_name, emb_type,
                                   suffix_to_label, file_suffixes)
     if X is None or len(X) < 2:
@@ -472,13 +474,13 @@ def make_cosim_plot(embeddings_dir, task_name, output_dir, emb_type,
     for tick, color in zip(ax.get_yticklabels(), tick_colors):
         tick.set_color(color)
 
-    ax.set_title(f"{task_name}  ·  {emb_type}  cosine similarity", fontsize=11)
+    ax.set_title(f"{model_title}  ·  {task_name}  ·  {emb_type}  cosine similarity", fontsize=11)
     fig.tight_layout()
     _save(fig, output_dir, f"{task_name}_{emb_type}_cosim.png", task_name=task_name)
 
 
 def make_all_tasks_cosim_plot(embeddings_dir, output_dir, emb_type,
-                              suffix_to_label, file_suffixes=None) -> None:
+                              suffix_to_label, model_title, file_suffixes=None) -> None:
     X, meta = collect_all_tasks_embeddings(embeddings_dir, emb_type,
                                             suffix_to_label, file_suffixes)
     if X is None or len(X) < 2:
@@ -535,7 +537,7 @@ def make_all_tasks_cosim_plot(embeddings_dir, output_dir, emb_type,
     for tick, color in zip(ax.get_yticklabels(), tick_colors):
         tick.set_color(color)
 
-    ax.set_title(f"all tasks  ·  {emb_type}  cosine similarity", fontsize=11)
+    ax.set_title(f"{model_title}  ·  all tasks  ·  {emb_type}  cosine similarity", fontsize=11)
     fig.tight_layout()
     _save(fig, output_dir, f"all_tasks_{emb_type}_cosim.png", task_name="all_tasks")
 
@@ -555,6 +557,7 @@ def _save(fig, output_dir: str, filename: str, task_name: str = None) -> None:
 
 MODEL_DEFAULTS = {
     "pi0": {
+        "display_name":   "pi0",
         "emb_types":      ["all_layers", "last_layer"],
         "subdir":         "pi0",
         "suffix_to_label": {
@@ -564,11 +567,22 @@ MODEL_DEFAULTS = {
         },
     },
     "openvla": {
+        "display_name":   "openvla",
         "emb_types":      ["layer-1_mean", "layer-1_final"],
         "subdir":         "openvla",
         "suffix_to_label": {
             "_basevlm_embds":    "base",        # Prismatic VLM (pre-robot)
             "_pretrained_embds": "pre-trained", # OpenVLA trained on Open-X
+            "_finetuned_embds":  "co-trained",  # fine-tuned checkpoint
+        },
+    },
+    "minivla": {
+        "display_name":   "minivla",
+        "emb_types":      ["layer-1_mean", "layer-1_final"],
+        "subdir":         "minivla",
+        "suffix_to_label": {
+            "_basevlm_embds":    "base",        # Prismatic VLM (pre-robot)
+            "_pretrained_embds": "pre-trained", # MiniVLA trained on Bridge
             "_finetuned_embds":  "co-trained",  # fine-tuned checkpoint
         },
     },
@@ -615,8 +629,9 @@ def main():
         args.embeddings_dir = os.path.join(repo, "embeddings", defaults["subdir"])
     if args.output_dir is None:
         args.output_dir = os.path.join(repo, "visualization", defaults["subdir"])
-    emb_types      = args.emb_types if args.emb_types is not None else defaults["emb_types"]
+    emb_types       = args.emb_types if args.emb_types is not None else defaults["emb_types"]
     suffix_to_label = defaults["suffix_to_label"]
+    model_title     = defaults["display_name"]
     file_suffixes   = args.file_suffixes  # None → all
 
     for emb_type in emb_types:
@@ -624,19 +639,19 @@ def main():
         if args.task_name:
             print(f"Task: {args.task_name}")
             make_tsne_plot (args.embeddings_dir, args.task_name, args.output_dir,
-                            emb_type, suffix_to_label, file_suffixes)
+                            emb_type, suffix_to_label, model_title, file_suffixes)
             make_pca_plot  (args.embeddings_dir, args.task_name, args.output_dir,
-                            emb_type, suffix_to_label, file_suffixes)
+                            emb_type, suffix_to_label, model_title, file_suffixes)
             make_cosim_plot(args.embeddings_dir, args.task_name, args.output_dir,
-                            emb_type, suffix_to_label, file_suffixes)
+                            emb_type, suffix_to_label, model_title, file_suffixes)
         else:
             print("All tasks combined")
             make_all_tasks_tsne_plot (args.embeddings_dir, args.output_dir,
-                                      emb_type, suffix_to_label, file_suffixes)
+                                      emb_type, suffix_to_label, model_title, file_suffixes)
             make_all_tasks_pca_plot  (args.embeddings_dir, args.output_dir,
-                                      emb_type, suffix_to_label, file_suffixes)
+                                      emb_type, suffix_to_label, model_title, file_suffixes)
             make_all_tasks_cosim_plot(args.embeddings_dir, args.output_dir,
-                                      emb_type, suffix_to_label, file_suffixes)
+                                      emb_type, suffix_to_label, model_title, file_suffixes)
 
 
 if __name__ == "__main__":

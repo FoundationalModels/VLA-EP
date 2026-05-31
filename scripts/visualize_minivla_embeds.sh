@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Visualize OpenVLA VLM embeddings (T-SNE, PCA, cosine-similarity heatmaps).
+# Visualize MiniVLA VLM embeddings (T-SNE, PCA, cosine-similarity heatmaps).
 #
 # Runs four pairwise/combined comparisons, each in its own subdirectory:
-#   base+pretrained/          — Prismatic base VLM vs Open-X post-trained
-#   pretrained+cotrained/     — Open-X post-trained vs fine-tuned checkpoint
+#   base+pretrained/          — Prismatic base VLM vs Bridge-pretrained
+#   pretrained+cotrained/     — Bridge-pretrained vs fine-tuned checkpoint
 #   base+cotrained/           — Prismatic base VLM vs fine-tuned checkpoint
 #   base+pretrained+cotrained/ — all three weight sets together
 #
@@ -12,12 +12,12 @@
 #
 # Co-trained checkpoints used per task:
 #   put_carrot_on_plate, put_knife_on_plate:
-#     checkpoints/openvla_cotrained_bridge+sink_carrot-knife_step-005000-epoch-56-loss=0.0368.pt
+#     checkpoints/minivla_cotrained_bridge+sink_carrot+knife_step-010000-epoch-113-loss=0.7581.pt
 #   flip_pot_upright, put_plate_in_sink:
-#     checkpoints/openvla_cotrained_bridge+sink_pot-plate_step-005000-epoch-26-loss=0.0030.pt
+#     checkpoints/minivla_cotrained_bridge+sink_pot-plate_step-010000-epoch-53-loss=0.3893.pt
 #
 # Output layout:
-#   visualization/openvla/
+#   visualization/minivla/
 #     base+pretrained/
 #     pretrained+cotrained/
 #     base+cotrained/
@@ -26,19 +26,19 @@
 #                      flip_pot_upright/  put_plate_in_sink/
 #
 # Usage:
-#   ./visualize_openvla_embeds.sh
-#   ./visualize_openvla_embeds.sh --embeddings_dir /path/to/embeddings/openvla
-#   ./visualize_openvla_embeds.sh --output_dir /path/to/visualization/openvla
+#   ./visualize_minivla_embeds.sh
+#   ./visualize_minivla_embeds.sh --embeddings_dir /path/to/embeddings/minivla
+#   ./visualize_minivla_embeds.sh --output_dir /path/to/visualization/minivla
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-CONDA_ENV="openvla-probe"
+CONDA_ENV="openvla-mini"
 PY_SCRIPT="$SCRIPT_DIR/visualize_vlm_embds.py"
 
-EMBEDDINGS_DIR="$REPO_DIR/embeddings/openvla"
-OUTPUT_DIR="$REPO_DIR/visualization/openvla"
+EMBEDDINGS_DIR="$REPO_DIR/embeddings/minivla"
+OUTPUT_DIR="$REPO_DIR/visualization/minivla"
 
 TASKS=(
     put_carrot_on_plate
@@ -62,7 +62,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo "============================================"
-echo "OpenVLA VLM embedding visualization"
+echo "MiniVLA VLM embedding visualization"
 echo "  embeddings : $EMBEDDINGS_DIR"
 echo "  output     : $OUTPUT_DIR"
 echo "============================================"
@@ -82,7 +82,7 @@ run_subset() {
     echo "========================================"
 
     local common_args=(
-        --model openvla
+        --model minivla
         --embeddings_dir "$EMBEDDINGS_DIR"
         --output_dir "$subset_dir"
     )
@@ -92,8 +92,6 @@ run_subset() {
 
     for task in "${TASKS[@]}"; do
         echo "  >>> $task"
-        # task_name positional must come before --file_suffixes to avoid nargs="+" greedily
-        # consuming it
         python "$PY_SCRIPT" "${common_args[@]}" "$task" "$@"
     done
 }

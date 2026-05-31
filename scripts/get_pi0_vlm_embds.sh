@@ -5,9 +5,8 @@
 # Pass --pi0_pretrained_path to also extract bridge-pretrained Pi0 embeddings.
 # Pass --checkpoint_path to also extract task-specific post-trained Pi0 embeddings.
 #
-# PaliGemma weights are downloaded automatically from HuggingFace if not present.
-# Default location: $TRANSFORMERS_CACHE/paligemma-3b-pt-224 (or
-# ~/.cache/huggingface/paligemma-3b-pt-224 when TRANSFORMERS_CACHE is unset).
+# PaliGemma weights are read from checkpoints/paligemma-3b-pt-224 by default.
+# Override with --pretrained_model_path if stored elsewhere.
 #
 # Output files in OUTPUT_DIR:
 #   {task}_{paligemma_model}_pretrained_embds.npz
@@ -20,8 +19,8 @@
 #
 #   # all three weight sets
 #   ./get_pi0_vlm_embds.sh \
-#       --pi0_pretrained_path ./checkpoints/pi0/bridge_beta_step19296_2024-12-26_22-30_42.pt \
-#       --checkpoint_path ./checkpoints/pi0_bridge+sink_carrot-knife_100000_noaug.pt
+#       --pi0_pretrained_path ./checkpoints/pi0_pretrained_bridge_beta_step19296_2024-12-26_22-30_42.pt \
+#       --checkpoint_path ./checkpoints/pi0_cotrained_bridge+sink_carrot-knife_100000_noaug.pt
 #
 #   # all options
 #   ./get_pi0_vlm_embds.sh --pretrained_model_path /path/to/paligemma-3b-pt-224 \
@@ -40,7 +39,7 @@ PY_SCRIPT="$PI_ZERO_DIR/scripts/get_pi0_vlm_embds.py"
 REF_EXP_PATH="$REPO_DIR/media/ref_exp.jsonc"
 IMAGE_BASE_DIR="$REPO_DIR/media"
 OUTPUT_DIR="$REPO_DIR/embeddings/pi0"
-PRETRAINED_MODEL_PATH=""
+PRETRAINED_MODEL_PATH="$REPO_DIR/checkpoints/pi0_basevlm_paligemma-3b-pt-224"
 PI0_PRETRAINED_PATH=""
 CHECKPOINT_PATH=""
 TASKS_ARG=""
