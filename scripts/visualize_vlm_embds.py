@@ -45,6 +45,7 @@ import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
+from sklearn.metrics import silhouette_score
 from sklearn.metrics.pairwise import cosine_similarity
 
 # ── Single-task color scheme ───────────────────────────────────────────────────
@@ -684,12 +685,26 @@ def make_pairwise_pca_plot(embeddings_dir, output_dir, emb_type,
 
 def make_task_discrimination_chart(embeddings_dir, output_dir, emb_type,
                                     suffix_to_label, model_title, file_suffixes=None) -> None:
-    """Bar chart of between-task and within-task cosine distances per weight set.
+    """Bar chart of task separation, discrimination, and sensitivity per weight set.
 
-    Between-task discrimination: mean pairwise cosine distance across task mean vectors.
+    Between-task separation
+      Let μ_t = mean embedding for task t in weight set ws.
+        separation(ws) = mean_{i≠j} (1 − cosine_sim(μ_i, μ_j))
       Higher = more distinct task representations.
-    Within-task instruction sensitivity: mean pairwise cosine distance across
-      instruction variants within a task, averaged over tasks.
+
+    Between-task discrimination
+      Cosine silhouette score over individual embeddings, normalized to [0, 1].
+      For each embedding i:
+        a_i = mean cosine distance to other embeddings in the same task
+        b_i = mean cosine distance to embeddings in the nearest other task
+        s_i = (b_i − a_i) / max(a_i, b_i)
+        discrimination(ws) = (mean_i(s_i) + 1) / 2
+      Higher = task clusters are better separated relative to their internal spread.
+
+    Within-task instruction sensitivity
+      Let D_t(ws) = mean_{i≠j} (1 − cosine_sim(v_i^t, v_j^t))
+          where v_i^t are individual instruction embeddings for task t.
+        sensitivity(ws) = mean_t D_t(ws)
       Higher = more sensitive to instruction rephrasing.
     """
     X, meta = collect_all_tasks_embeddings(embeddings_dir, emb_type,
@@ -701,11 +716,13 @@ def make_task_discrimination_chart(embeddings_dir, output_dir, emb_type,
     if not ws_present:
         return
 
-    bt_dist = {}  # between-task cosine distance
+    bt_dist = {}  # between-task separation: cosine distance between task centroids
+    bt_disc = {}  # between-task discrimination: normalized cosine silhouette score
     wt_dist = {}  # within-task instruction-sensitivity cosine distance
 
     for ws in ws_present:
         task_means = {}
+        ws_mask = [i for i, m in enumerate(meta) if m[1] == ws]
         for task in TASK_ORDER:
             mask = [i for i, m in enumerate(meta) if m[0] == task and m[1] == ws]
             if mask:
@@ -715,12 +732,19 @@ def make_task_discrimination_chart(embeddings_dir, output_dir, emb_type,
         if len(tasks_with_data) < 2:
             continue
 
-        # Between-task: average off-diagonal cosine sim across task mean vectors
+        # Between-task separation: average off-diagonal cosine distance across task mean vectors
         vecs = np.stack([task_means[t] for t in tasks_with_data])
         sim = cosine_similarity(vecs)
         n = len(tasks_with_data)
         off_diag = [sim[i, j] for i in range(n) for j in range(n) if i != j]
         bt_dist[ws] = 1.0 - float(np.mean(off_diag))
+
+        # Between-task discrimination: standardized cosine silhouette score.
+        # sklearn returns [-1, 1], so normalize to [0, 1] for chart comparison.
+        labels = [meta[i][0] for i in ws_mask]
+        if 1 < len(set(labels)) < len(labels):
+            raw_silhouette = silhouette_score(X[ws_mask], labels, metric="cosine")
+            bt_disc[ws] = 0.5 * (float(raw_silhouette) + 1.0)
 
         # Within-task: average pairwise cosine distance between instruction variants
         per_task_wt = []
@@ -745,15 +769,16 @@ def make_task_discrimination_chart(embeddings_dir, output_dir, emb_type,
         "co-trained":  "#3498db",
     }
 
+    has_disc = bool(bt_disc)
     has_wt = bool(wt_dist)
-    n_panels = 2 if has_wt else 1
+    n_panels = 1 + int(has_disc) + int(has_wt)
     fig, axes = plt.subplots(1, n_panels, figsize=(5 * n_panels, 4.5))
     if n_panels == 1:
         axes = [axes]
 
     x = np.arange(len(ws_present))
 
-    def _bar_panel(ax, values_dict, title, y_label, y_fmt):
+    def _bar_panel(ax, values_dict, title, y_label, y_fmt, y_lim=None):
         vals = [values_dict.get(ws, 0.0) for ws in ws_present]
         bars = ax.bar(
             x, vals,
@@ -771,21 +796,33 @@ def make_task_discrimination_chart(embeddings_dir, output_dir, emb_type,
         ax.set_xticklabels(ws_present, fontsize=10)
         ax.set_ylabel(y_label, fontsize=9)
         ax.set_title(title, fontsize=11)
-        ax.set_ylim(0, max(vals) * 1.3 + 1e-9)
+        if y_lim is None:
+            ax.set_ylim(0, max(vals) * 1.3 + 1e-9)
+        else:
+            ax.set_ylim(*y_lim)
         ax.grid(True, axis="y", alpha=0.25, linestyle="--")
         ax.axhline(0, color="#333", linewidth=0.5)
 
     _bar_panel(axes[0], bt_dist,
-               "between-task discrimination",
+               "between-task separation",
                "mean cosine distance  (1 − similarity)", "{:.4f}")
 
+    panel_idx = 1
+    if has_disc:
+        _bar_panel(axes[panel_idx], bt_disc,
+                   "between-task discrimination",
+                   "normalized cosine silhouette  ((s + 1) / 2)", "{:.3f}",
+                   y_lim=(0, 1))
+        axes[panel_idx].axhline(0.5, color="#555", linewidth=0.7, alpha=0.55)
+        panel_idx += 1
+
     if has_wt:
-        _bar_panel(axes[1], wt_dist,
+        _bar_panel(axes[panel_idx], wt_dist,
                    "within-task instruction sensitivity",
                    "mean cosine distance  (1 − similarity)", "{:.5f}")
 
     fig.suptitle(
-        f"{model_title}  ·  all tasks  ·  {emb_type}  task discrimination",
+        f"{model_title}  ·  all tasks  ·  {emb_type}  task separation/discrimination",
         fontsize=12,
     )
     fig.tight_layout()
