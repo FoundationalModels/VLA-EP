@@ -17,7 +17,7 @@
 #     checkpoints/minivla_cotrained_bridge+sink_pot-plate_step-010000-epoch-53-loss=0.3893.pt
 #
 # Output layout:
-#   visualization/minivla/
+#   visualizations/minivla/
 #     base+pretrained/
 #     pretrained+cotrained/
 #     base+cotrained/
@@ -28,7 +28,7 @@
 # Usage:
 #   ./visualize_minivla_embeds.sh
 #   ./visualize_minivla_embeds.sh --embeddings_dir /path/to/embeddings/minivla
-#   ./visualize_minivla_embeds.sh --output_dir /path/to/visualization/minivla
+#   ./visualize_minivla_embeds.sh --output_dir /path/to/visualizations/minivla
 
 set -euo pipefail
 
@@ -38,7 +38,7 @@ CONDA_ENV="openvla-mini"
 PY_SCRIPT="$SCRIPT_DIR/visualize_vlm_embds.py"
 
 EMBEDDINGS_DIR="$REPO_DIR/embeddings/minivla"
-OUTPUT_DIR="$REPO_DIR/visualization/minivla"
+OUTPUT_DIR="$REPO_DIR/visualizations/minivla"
 
 TASKS=(
     put_carrot_on_plate

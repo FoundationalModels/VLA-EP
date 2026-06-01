@@ -20,7 +20,7 @@
 #     checkpoints/pi0_cotrained_bridge+sink_pot-plate_100000_noaug.pt
 #
 # Output layout:
-#   visualization/pi0/
+#   visualizations/pi0/
 #     {comparison}/
 #       all_tasks/
 #       put_carrot_on_plate/
@@ -31,7 +31,7 @@
 # Usage:
 #   ./visualize_pi0_embeds.sh
 #   ./visualize_pi0_embeds.sh --embeddings_dir /path/to/embeddings/pi0
-#   ./visualize_pi0_embeds.sh --output_dir /path/to/visualization/pi0
+#   ./visualize_pi0_embeds.sh --output_dir /path/to/visualizations/pi0
 
 set -euo pipefail
 
@@ -41,7 +41,7 @@ CONDA_ENV="openvla-probe"
 PY_SCRIPT="$SCRIPT_DIR/visualize_vlm_embds.py"
 
 EMBEDDINGS_DIR="$REPO_DIR/embeddings/pi0"
-OUTPUT_DIR="$REPO_DIR/visualization/pi0"
+OUTPUT_DIR="$REPO_DIR/visualizations/pi0"
 
 TASKS=(
     put_carrot_on_plate

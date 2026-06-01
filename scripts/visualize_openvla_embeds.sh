@@ -17,7 +17,7 @@
 #     checkpoints/openvla_cotrained_bridge+sink_pot-plate_step-005000-epoch-26-loss=0.0030.pt
 #
 # Output layout:
-#   visualization/openvla/
+#   visualizations/openvla/
 #     base+pretrained/
 #     pretrained+cotrained/
 #     base+cotrained/
@@ -28,7 +28,7 @@
 # Usage:
 #   ./visualize_openvla_embeds.sh
 #   ./visualize_openvla_embeds.sh --embeddings_dir /path/to/embeddings/openvla
-#   ./visualize_openvla_embeds.sh --output_dir /path/to/visualization/openvla
+#   ./visualize_openvla_embeds.sh --output_dir /path/to/visualizations/openvla
 
 set -euo pipefail
 
@@ -38,7 +38,7 @@ CONDA_ENV="openvla-probe"
 PY_SCRIPT="$SCRIPT_DIR/visualize_vlm_embds.py"
 
 EMBEDDINGS_DIR="$REPO_DIR/embeddings/openvla"
-OUTPUT_DIR="$REPO_DIR/visualization/openvla"
+OUTPUT_DIR="$REPO_DIR/visualizations/openvla"
 
 TASKS=(
     put_carrot_on_plate

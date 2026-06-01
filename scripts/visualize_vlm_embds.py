@@ -8,15 +8,22 @@ Per-task mode (positional task_name argument):
     - Cosine similarity heatmap
 
 All-tasks mode (no positional argument):
-  Same three plot types, combining all 4 tasks in one figure.
-  Color encodes task identity; marker/shade encodes weight set.
+  Five plot types, combining all 4 tasks in one figure:
+    - T-SNE scatter
+    - PCA scatter        (joint — base→pretrained gap dominates PC1)
+    - Cosine similarity heatmap
+    - Per-weight-set PCA (one panel per weight set, each independently fitted —
+                          removes the cross-group gap so within-panel variation shows
+                          task separation and instruction sensitivity directly)
+    - Task discrimination chart  (mean between-task cosine distance per weight set,
+                                  plus within-task instruction sensitivity)
 
 Use --model to select defaults for each model:
-  pi0     : emb_types="all_layers last_layer"   dirs=embeddings/pi0  visualization/pi0
+  pi0     : emb_types="all_layers last_layer"   dirs=embeddings/pi0  visualizations/pi0
             weight sets: base (PaliGemma) · pre-trained (Pi0 bridge) · co-trained (Pi0 task)
-  openvla : emb_types="layer-1_mean layer-1_final"  dirs=embeddings/openvla visualization/openvla
+  openvla : emb_types="layer-1_mean layer-1_final"  dirs=embeddings/openvla visualizations/openvla
             weight sets: base (Prismatic) · pre-trained (Open-X) · co-trained (finetuned)
-  minivla : emb_types="layer-1_mean layer-1_final"  dirs=embeddings/minivla visualization/minivla
+  minivla : emb_types="layer-1_mean layer-1_final"  dirs=embeddings/minivla visualizations/minivla
             weight sets: base (Prismatic) · pre-trained (Bridge) · co-trained (finetuned)
 
 Color scheme (scatter plots):
@@ -542,6 +549,250 @@ def make_all_tasks_cosim_plot(embeddings_dir, output_dir, emb_type,
     _save(fig, output_dir, f"all_tasks_{emb_type}_cosim.png", task_name="all_tasks")
 
 
+# ── Pairwise PCA ─────────────────────────────────────────────────────────────
+
+# All ordered pairs to compare; only panels whose both weight sets are present
+# in the data are rendered.
+_PAIRS = [
+    ("base",        "pre-trained"),
+    ("pre-trained", "co-trained"),
+    ("base",        "co-trained"),
+]
+
+
+def make_pairwise_pca_plot(embeddings_dir, output_dir, emb_type,
+                            suffix_to_label, model_title, file_suffixes=None) -> None:
+    """Pairwise PCA panels on a shared joint basis.
+
+    PCA is fitted on all embeddings jointly.  One panel is rendered per ordered
+    pair (base vs pre-trained, pre-trained vs co-trained, base vs co-trained).
+    All panels share the same coordinate system and axis limits so the
+    inter-set shift and within-set task structure are visible simultaneously.
+
+    In each panel:
+      - Both focal weight sets are drawn with task colours; alpha encodes the
+        weight set (base = most faded, pre-trained = medium, co-trained = vivid).
+      - The remaining weight set (if present) appears as labelled grey dots so
+        the viewer can see where it sits relative to the focal pair.
+    """
+    X, meta = collect_all_tasks_embeddings(embeddings_dir, emb_type,
+                                            suffix_to_label, file_suffixes)
+    if X is None or len(X) < 2:
+        print(f"  [pairwise PCA] not enough data"); return
+
+    ws_in_data = {m[1] for m in meta}
+    active_pairs = [(a, b) for a, b in _PAIRS if a in ws_in_data and b in ws_in_data]
+    if not active_pairs:
+        return
+
+    # Fit PCA on all data jointly
+    pca = PCA(n_components=2)
+    X2d = pca.fit_transform(X)
+    var = pca.explained_variance_ratio_
+
+    # Shared axis limits with padding
+    pad_x = (X2d[:, 0].max() - X2d[:, 0].min()) * 0.18
+    pad_y = (X2d[:, 1].max() - X2d[:, 1].min()) * 0.18
+    xlim = (X2d[:, 0].min() - pad_x, X2d[:, 0].max() + pad_x)
+    ylim = (X2d[:, 1].min() - pad_y, X2d[:, 1].max() + pad_y)
+
+    n_panels = len(active_pairs)
+    fig, axes = plt.subplots(1, n_panels, figsize=(6.5 * n_panels, 5.5))
+    if n_panels == 1:
+        axes = [axes]
+
+    for ax, (ws_a, ws_b) in zip(axes, active_pairs):
+        focal = {ws_a, ws_b}
+        bg_wss = [ws for ws in WEIGHT_SET_ORDER if ws in ws_in_data and ws not in focal]
+
+        # Background: one scatter call per non-focal weight set so each gets its own
+        # named legend entry.
+        for bg_ws in bg_wss:
+            bg_idx = [i for i, m in enumerate(meta) if m[1] == bg_ws]
+            if bg_idx:
+                ax.scatter(
+                    X2d[bg_idx, 0], X2d[bg_idx, 1],
+                    c="#c8c8c8", s=30, marker="o",
+                    edgecolors="none", alpha=0.5, zorder=1,
+                )
+
+        # Foreground: both focal weight sets with task colours + alpha encoding
+        for i, (task_name, ws, inst_key, _) in enumerate(meta):
+            if ws not in focal:
+                continue
+            color = task_point_color(task_name, ws)
+            marker = "D" if inst_key == "base" else "o"
+            ax.scatter(
+                X2d[i, 0], X2d[i, 1],
+                c=color, s=WEIGHT_SET_SIZE.get(ws, 110), marker=marker,
+                edgecolors="#555", linewidths=0.5, zorder=3,
+            )
+            ax.annotate(
+                f"{TASK_SHORT[task_name]}\n{_inst_display(inst_key)}",
+                (X2d[i, 0], X2d[i, 1]),
+                textcoords="offset points", xytext=(6, 4),
+                fontsize=6, color=color,
+            )
+
+        # ── Legend — mirrors _render_all_tasks_scatter ────────────────────────
+        # Upper-left: task colours
+        task_handles = [
+            mpatches.Patch(facecolor=TASK_COLORS_FT[t], edgecolor="#555", linewidth=0.6,
+                           label=TASK_SHORT[t])
+            for t in TASK_ORDER if any(m[0] == t for m in meta)
+        ]
+        leg1 = ax.legend(handles=task_handles, title="task", fontsize=8,
+                         loc="upper left", title_fontsize=8)
+        ax.add_artist(leg1)
+
+        # Lower-left: weight-set shade + original/variant marker, then background
+        shade_map = {"co-trained": "#666", "pre-trained": "#aaa", "base": "#ccc"}
+        enc_handles = []
+        for ws in [w for w in WEIGHT_SET_ORDER if w in focal]:
+            lbl   = _ws_legend_label(ws, focal)
+            shade = shade_map.get(ws, "#aaa")
+            sz    = WEIGHT_SET_SIZE.get(ws, 110)
+            enc_handles.append(plt.scatter([], [], marker="D", c=shade, s=sz,
+                                           edgecolors="#555", linewidths=0.5,
+                                           label=f"{lbl} — original"))
+            enc_handles.append(plt.scatter([], [], marker="o", c=shade, s=sz,
+                                           edgecolors="#555", linewidths=0.5,
+                                           label=f"{lbl} — variant"))
+        for bg_ws in bg_wss:
+            enc_handles.append(plt.scatter([], [], marker="o", c="#c8c8c8", s=30,
+                                           edgecolors="none",
+                                           label=f"{bg_ws} (background)"))
+        ax.legend(handles=enc_handles, fontsize=8, loc="lower left")
+
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
+        ax.set_title(f"{ws_a}  vs  {ws_b}", fontsize=12, fontweight="bold")
+        ax.set_xlabel(f"PC1  ({var[0]:.1%} var)", fontsize=9)
+        ax.set_ylabel(f"PC2  ({var[1]:.1%} var)", fontsize=9)
+        ax.tick_params(labelsize=8)
+        ax.grid(True, alpha=0.25, linestyle="--")
+
+    fig.suptitle(
+        f"{model_title}  ·  all tasks  ·  {emb_type}  pairwise PCA  (shared axes)",
+        fontsize=12,
+    )
+    fig.tight_layout()
+    _save(fig, output_dir, f"all_tasks_{emb_type}_pairwise_pca.png", task_name="all_tasks")
+
+
+# ── Task discrimination chart ─────────────────────────────────────────────────
+
+def make_task_discrimination_chart(embeddings_dir, output_dir, emb_type,
+                                    suffix_to_label, model_title, file_suffixes=None) -> None:
+    """Bar chart of between-task and within-task cosine distances per weight set.
+
+    Between-task discrimination: mean pairwise cosine distance across task mean vectors.
+      Higher = more distinct task representations.
+    Within-task instruction sensitivity: mean pairwise cosine distance across
+      instruction variants within a task, averaged over tasks.
+      Higher = more sensitive to instruction rephrasing.
+    """
+    X, meta = collect_all_tasks_embeddings(embeddings_dir, emb_type,
+                                            suffix_to_label, file_suffixes)
+    if X is None or len(X) < 2:
+        print(f"  [task discrimination] not enough data"); return
+
+    ws_present = [ws for ws in WEIGHT_SET_ORDER if any(m[1] == ws for m in meta)]
+    if not ws_present:
+        return
+
+    bt_dist = {}  # between-task cosine distance
+    wt_dist = {}  # within-task instruction-sensitivity cosine distance
+
+    for ws in ws_present:
+        task_means = {}
+        for task in TASK_ORDER:
+            mask = [i for i, m in enumerate(meta) if m[0] == task and m[1] == ws]
+            if mask:
+                task_means[task] = X[mask].mean(axis=0)
+
+        tasks_with_data = list(task_means.keys())
+        if len(tasks_with_data) < 2:
+            continue
+
+        # Between-task: average off-diagonal cosine sim across task mean vectors
+        vecs = np.stack([task_means[t] for t in tasks_with_data])
+        sim = cosine_similarity(vecs)
+        n = len(tasks_with_data)
+        off_diag = [sim[i, j] for i in range(n) for j in range(n) if i != j]
+        bt_dist[ws] = 1.0 - float(np.mean(off_diag))
+
+        # Within-task: average pairwise cosine distance between instruction variants
+        per_task_wt = []
+        for task in tasks_with_data:
+            mask = [i for i, m in enumerate(meta) if m[0] == task and m[1] == ws]
+            if len(mask) < 2:
+                continue
+            vt = X[mask]
+            st = cosine_similarity(vt)
+            nt = len(mask)
+            od = [st[i, j] for i in range(nt) for j in range(nt) if i != j]
+            per_task_wt.append(1.0 - float(np.mean(od)))
+        if per_task_wt:
+            wt_dist[ws] = float(np.mean(per_task_wt))
+
+    if not bt_dist:
+        print(f"  [task discrimination] no data after grouping"); return
+
+    bar_fill = {
+        "base":        _fade("#3498db", 0.25),
+        "pre-trained": _fade("#3498db", 0.60),
+        "co-trained":  "#3498db",
+    }
+
+    has_wt = bool(wt_dist)
+    n_panels = 2 if has_wt else 1
+    fig, axes = plt.subplots(1, n_panels, figsize=(5 * n_panels, 4.5))
+    if n_panels == 1:
+        axes = [axes]
+
+    x = np.arange(len(ws_present))
+
+    def _bar_panel(ax, values_dict, title, y_label, y_fmt):
+        vals = [values_dict.get(ws, 0.0) for ws in ws_present]
+        bars = ax.bar(
+            x, vals,
+            color=[bar_fill.get(ws, "#aaa") for ws in ws_present],
+            edgecolor="#333", linewidth=0.8, width=0.5,
+        )
+        for bar, val in zip(bars, vals):
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height() + max(vals) * 0.01,
+                y_fmt.format(val),
+                ha="center", va="bottom", fontsize=10, fontweight="bold",
+            )
+        ax.set_xticks(x)
+        ax.set_xticklabels(ws_present, fontsize=10)
+        ax.set_ylabel(y_label, fontsize=9)
+        ax.set_title(title, fontsize=11)
+        ax.set_ylim(0, max(vals) * 1.3 + 1e-9)
+        ax.grid(True, axis="y", alpha=0.25, linestyle="--")
+        ax.axhline(0, color="#333", linewidth=0.5)
+
+    _bar_panel(axes[0], bt_dist,
+               "between-task discrimination",
+               "mean cosine distance  (1 − similarity)", "{:.4f}")
+
+    if has_wt:
+        _bar_panel(axes[1], wt_dist,
+                   "within-task instruction sensitivity",
+                   "mean cosine distance  (1 − similarity)", "{:.5f}")
+
+    fig.suptitle(
+        f"{model_title}  ·  all tasks  ·  {emb_type}  task discrimination",
+        fontsize=12,
+    )
+    fig.tight_layout()
+    _save(fig, output_dir, f"all_tasks_{emb_type}_task_discrimination.png",
+          task_name="all_tasks")
+
+
 # ── Util ──────────────────────────────────────────────────────────────────────
 
 def _save(fig, output_dir: str, filename: str, task_name: str = None) -> None:
@@ -628,7 +879,7 @@ def main():
     if args.embeddings_dir is None:
         args.embeddings_dir = os.path.join(repo, "embeddings", defaults["subdir"])
     if args.output_dir is None:
-        args.output_dir = os.path.join(repo, "visualization", defaults["subdir"])
+        args.output_dir = os.path.join(repo, "visualizations", defaults["subdir"])
     emb_types       = args.emb_types if args.emb_types is not None else defaults["emb_types"]
     suffix_to_label = defaults["suffix_to_label"]
     model_title     = defaults["display_name"]
@@ -646,12 +897,19 @@ def main():
                             emb_type, suffix_to_label, model_title, file_suffixes)
         else:
             print("All tasks combined")
-            make_all_tasks_tsne_plot (args.embeddings_dir, args.output_dir,
-                                      emb_type, suffix_to_label, model_title, file_suffixes)
-            make_all_tasks_pca_plot  (args.embeddings_dir, args.output_dir,
-                                      emb_type, suffix_to_label, model_title, file_suffixes)
-            make_all_tasks_cosim_plot(args.embeddings_dir, args.output_dir,
-                                      emb_type, suffix_to_label, model_title, file_suffixes)
+            make_all_tasks_tsne_plot  (args.embeddings_dir, args.output_dir,
+                                       emb_type, suffix_to_label, model_title, file_suffixes)
+            make_all_tasks_pca_plot   (args.embeddings_dir, args.output_dir,
+                                       emb_type, suffix_to_label, model_title, file_suffixes)
+            make_all_tasks_cosim_plot (args.embeddings_dir, args.output_dir,
+                                       emb_type, suffix_to_label, model_title, file_suffixes)
+            if file_suffixes is None:
+                # Pairwise PCA and discrimination chart only make sense with all
+                # weight sets present; restrict to the base+pretrained+cotrained run.
+                make_pairwise_pca_plot           (args.embeddings_dir, args.output_dir,
+                                                  emb_type, suffix_to_label, model_title)
+                make_task_discrimination_chart   (args.embeddings_dir, args.output_dir,
+                                                  emb_type, suffix_to_label, model_title)
 
 
 if __name__ == "__main__":
