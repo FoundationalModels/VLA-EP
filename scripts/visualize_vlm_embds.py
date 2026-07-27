@@ -118,7 +118,7 @@ TASK_ORDER = [
 
 TASK_COLORS_FT = {
     "put_carrot_on_plate": "#e74c3c",   # red
-    "put_knife_on_plate":  "#e67e22",   # orange
+    "put_knife_on_plate":  "#0173b2",   # blue
     "flip_pot_upright":    "#9b59b6",   # purple
     "put_plate_in_sink":   "#1abc9c",   # teal
 }
@@ -129,6 +129,11 @@ TASK_SHORT = {
     "flip_pot_upright":    "pot",
     "put_plate_in_sink":   "plate",
 }
+
+CHECKPOINT_TASK_GROUPS = [
+    ("carrot_knife", ("put_carrot_on_plate", "put_knife_on_plate"), "carrot/knife checkpoint"),
+    ("pot_plate",    ("flip_pot_upright", "put_plate_in_sink"),     "pot/plate checkpoint"),
+]
 
 
 # ── Data helpers ──────────────────────────────────────────────────────────────
@@ -214,6 +219,36 @@ def collect_all_tasks_embeddings(embeddings_dir: str, emb_type: str,
 
     vecs, meta = [], []
     for task_name in TASK_ORDER:
+        all_files = find_embedding_files(embeddings_dir, task_name)
+        if not all_files:
+            print(f"  [warn] no embedding files for task: {task_name}")
+            continue
+        ordered = []
+        for sfx in suffix_order:
+            ordered += [f for f in all_files if f.endswith(sfx + ".npz")]
+        for fp in ordered:
+            ws, model_label = parse_file_info(fp, task_name, suffix_to_label)
+            if ws is None:
+                continue
+            for inst_key, vec in load_vecs(fp, emb_type).items():
+                vecs.append(vec)
+                meta.append((task_name, ws, inst_key, model_label))
+    if not vecs:
+        return None, None
+    return np.stack(vecs), meta
+
+
+def collect_task_group_embeddings(embeddings_dir: str, task_names, emb_type: str,
+                                  suffix_to_label: dict, file_suffixes=None):
+    """
+    Returns embeddings for a fixed task group, preserving the same ordering as
+    collect_all_tasks_embeddings but without mixing co-trained checkpoint groups.
+    """
+    suffixes = file_suffixes if file_suffixes is not None else ALL_SUFFIXES
+    suffix_order = [s for s in ALL_SUFFIXES if s in suffixes]
+
+    vecs, meta = [], []
+    for task_name in task_names:
         all_files = find_embedding_files(embeddings_dir, task_name)
         if not all_files:
             print(f"  [warn] no embedding files for task: {task_name}")
@@ -408,6 +443,167 @@ def make_all_tasks_pca_plot(embeddings_dir, output_dir, emb_type,
                               ylabel=f"PC2  ({var[1]:.1%} var)",
                               title=f"{model_title}  ·  all tasks  ·  {emb_type}  PCA")
     _save(fig, output_dir, f"all_tasks_{emb_type}_pca.png", task_name="all_tasks")
+
+
+def make_checkpoint_group_pca_plot(embeddings_dir, output_dir, emb_type,
+                                   suffix_to_label, model_title, file_suffixes=None) -> None:
+    """One independently fitted PCA panel per co-trained checkpoint task group."""
+    panels = []
+    for group_key, task_names, group_label in CHECKPOINT_TASK_GROUPS:
+        X, meta = collect_task_group_embeddings(embeddings_dir, task_names, emb_type,
+                                                suffix_to_label, file_suffixes)
+        if X is None or len(X) < 2:
+            print(f"  [PCA {group_key}] not enough data")
+            continue
+
+        pca = PCA(n_components=2)
+        X2d = pca.fit_transform(X)
+        panels.append((group_label, X2d, meta, pca.explained_variance_ratio_))
+
+    if not panels:
+        return
+
+    fig, axes = plt.subplots(1, len(panels), figsize=(8 * len(panels), 6))
+    if len(panels) == 1:
+        axes = [axes]
+
+    for ax, (group_label, X2d, meta, var) in zip(axes, panels):
+        _render_all_tasks_scatter(
+            ax, X2d, meta,
+            xlabel=f"PC1  ({var[0]:.1%} var)",
+            ylabel=f"PC2  ({var[1]:.1%} var)",
+            title=group_label,
+        )
+
+    fig.suptitle(
+        f"{model_title}  ·  checkpoint groups  ·  {emb_type}  PCA  (independent axes)",
+        fontsize=12,
+    )
+    fig.tight_layout()
+    _save(fig, output_dir, f"all_tasks_{emb_type}_checkpoint_group_pca.png",
+          task_name="all_tasks")
+
+
+def make_checkpoint_group_pairwise_pca_plot(embeddings_dir, output_dir, emb_type,
+                                            suffix_to_label, model_title,
+                                            file_suffixes=None) -> None:
+    """Pairwise PCA panels, fitted independently within each checkpoint group."""
+    group_panels = []
+
+    for group_key, task_names, group_label in CHECKPOINT_TASK_GROUPS:
+        X, meta = collect_task_group_embeddings(embeddings_dir, task_names, emb_type,
+                                                suffix_to_label, file_suffixes)
+        if X is None or len(X) < 2:
+            print(f"  [pairwise PCA {group_key}] not enough data")
+            continue
+
+        ws_in_data = {m[1] for m in meta}
+        active_pairs = [(a, b) for a, b in _PAIRS if a in ws_in_data and b in ws_in_data]
+        if not active_pairs:
+            continue
+
+        pca = PCA(n_components=2)
+        X2d = pca.fit_transform(X)
+        var = pca.explained_variance_ratio_
+
+        pad_x = (X2d[:, 0].max() - X2d[:, 0].min()) * 0.18
+        pad_y = (X2d[:, 1].max() - X2d[:, 1].min()) * 0.18
+        xlim = (X2d[:, 0].min() - pad_x, X2d[:, 0].max() + pad_x)
+        ylim = (X2d[:, 1].min() - pad_y, X2d[:, 1].max() + pad_y)
+
+        group_panels.append((group_label, X2d, meta, var, xlim, ylim, active_pairs))
+
+    if not group_panels:
+        return
+
+    n_rows = len(group_panels)
+    n_cols = max(len(p[-1]) for p in group_panels)
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(6.5 * n_cols, 5.5 * n_rows))
+    if n_rows == 1:
+        axes = np.asarray([axes])
+    if n_cols == 1:
+        axes = axes[:, None]
+
+    for row_idx, (group_label, X2d, meta, var, xlim, ylim, active_pairs) in enumerate(group_panels):
+        ws_in_data = {m[1] for m in meta}
+        for col_idx in range(n_cols):
+            ax = axes[row_idx, col_idx]
+            if col_idx >= len(active_pairs):
+                ax.axis("off")
+                continue
+
+            ws_a, ws_b = active_pairs[col_idx]
+            focal = {ws_a, ws_b}
+            bg_wss = [ws for ws in WEIGHT_SET_ORDER if ws in ws_in_data and ws not in focal]
+
+            for bg_ws in bg_wss:
+                bg_idx = [i for i, m in enumerate(meta) if m[1] == bg_ws]
+                if bg_idx:
+                    ax.scatter(
+                        X2d[bg_idx, 0], X2d[bg_idx, 1],
+                        c="#c8c8c8", s=30, marker="o",
+                        edgecolors="none", alpha=0.5, zorder=1,
+                    )
+
+            for i, (task_name, ws, inst_key, _) in enumerate(meta):
+                if ws not in focal:
+                    continue
+                color = task_point_color(task_name, ws)
+                marker = "D" if inst_key == "base" else "o"
+                ax.scatter(
+                    X2d[i, 0], X2d[i, 1],
+                    c=color, s=WEIGHT_SET_SIZE.get(ws, 110), marker=marker,
+                    edgecolors="#555", linewidths=0.5, zorder=3,
+                )
+                ax.annotate(
+                    f"{TASK_SHORT[task_name]}\n{_inst_display(inst_key)}",
+                    (X2d[i, 0], X2d[i, 1]),
+                    textcoords="offset points", xytext=(6, 4),
+                    fontsize=6, color=color,
+                )
+
+            task_handles = [
+                mpatches.Patch(facecolor=TASK_COLORS_FT[t], edgecolor="#555", linewidth=0.6,
+                               label=TASK_SHORT[t])
+                for t in TASK_ORDER if any(m[0] == t for m in meta)
+            ]
+            leg1 = ax.legend(handles=task_handles, title="task", fontsize=8,
+                             loc="upper left", title_fontsize=8)
+            ax.add_artist(leg1)
+
+            shade_map = {"co-trained": "#666", "pre-trained": "#aaa", "base": "#ccc"}
+            enc_handles = []
+            for ws in [w for w in WEIGHT_SET_ORDER if w in focal]:
+                lbl = _ws_legend_label(ws, focal)
+                shade = shade_map.get(ws, "#aaa")
+                sz = WEIGHT_SET_SIZE.get(ws, 110)
+                enc_handles.append(plt.scatter([], [], marker="D", c=shade, s=sz,
+                                               edgecolors="#555", linewidths=0.5,
+                                               label=f"{lbl} — original"))
+                enc_handles.append(plt.scatter([], [], marker="o", c=shade, s=sz,
+                                               edgecolors="#555", linewidths=0.5,
+                                               label=f"{lbl} — variant"))
+            for bg_ws in bg_wss:
+                enc_handles.append(plt.scatter([], [], marker="o", c="#c8c8c8", s=30,
+                                               edgecolors="none",
+                                               label=f"{bg_ws} (background)"))
+            ax.legend(handles=enc_handles, fontsize=8, loc="lower left")
+
+            ax.set_xlim(xlim)
+            ax.set_ylim(ylim)
+            ax.set_title(f"{group_label}\n{ws_a}  vs  {ws_b}", fontsize=12, fontweight="bold")
+            ax.set_xlabel(f"PC1  ({var[0]:.1%} var)", fontsize=9)
+            ax.set_ylabel(f"PC2  ({var[1]:.1%} var)", fontsize=9)
+            ax.tick_params(labelsize=8)
+            ax.grid(True, alpha=0.25, linestyle="--")
+
+    fig.suptitle(
+        f"{model_title}  ·  checkpoint groups  ·  {emb_type}  pairwise PCA  (independent axes)",
+        fontsize=12,
+    )
+    fig.tight_layout()
+    _save(fig, output_dir, f"all_tasks_{emb_type}_checkpoint_group_pairwise_pca.png",
+          task_name="all_tasks")
 
 
 # ── Cosine similarity heatmap ─────────────────────────────────────────────────
@@ -683,35 +879,9 @@ def make_pairwise_pca_plot(embeddings_dir, output_dir, emb_type,
 
 # ── Task discrimination chart ─────────────────────────────────────────────────
 
-def make_task_discrimination_chart(embeddings_dir, output_dir, emb_type,
-                                    suffix_to_label, model_title, file_suffixes=None) -> None:
-    """Bar chart of task separation, discrimination, and sensitivity per weight set.
-
-    Between-task separation
-      Let μ_t = mean embedding for task t in weight set ws.
-        separation(ws) = mean_{i≠j} (1 − cosine_sim(μ_i, μ_j))
-      Higher = more distinct task representations.
-
-    Between-task discrimination
-      Cosine silhouette score over individual embeddings, normalized to [0, 1].
-      For each embedding i:
-        a_i = mean cosine distance to other embeddings in the same task
-        b_i = mean cosine distance to embeddings in the nearest other task
-        s_i = (b_i − a_i) / max(a_i, b_i)
-        discrimination(ws) = (mean_i(s_i) + 1) / 2
-      Higher = task clusters are better separated relative to their internal spread.
-
-    Within-task instruction sensitivity
-      Let D_t(ws) = mean_{i≠j} (1 − cosine_sim(v_i^t, v_j^t))
-          where v_i^t are individual instruction embeddings for task t.
-        sensitivity(ws) = mean_t D_t(ws)
-      Higher = more sensitive to instruction rephrasing.
-    """
-    X, meta = collect_all_tasks_embeddings(embeddings_dir, emb_type,
-                                            suffix_to_label, file_suffixes)
-    if X is None or len(X) < 2:
-        print(f"  [task discrimination] not enough data"); return
-
+def _make_task_discrimination_chart_from_data(X, meta, output_dir, filename,
+                                              title, task_order) -> None:
+    """Bar chart of task separation, discrimination, and sensitivity per weight set."""
     ws_present = [ws for ws in WEIGHT_SET_ORDER if any(m[1] == ws for m in meta)]
     if not ws_present:
         return
@@ -723,7 +893,7 @@ def make_task_discrimination_chart(embeddings_dir, output_dir, emb_type,
     for ws in ws_present:
         task_means = {}
         ws_mask = [i for i, m in enumerate(meta) if m[1] == ws]
-        for task in TASK_ORDER:
+        for task in task_order:
             mask = [i for i, m in enumerate(meta) if m[0] == task and m[1] == ws]
             if mask:
                 task_means[task] = X[mask].mean(axis=0)
@@ -778,7 +948,7 @@ def make_task_discrimination_chart(embeddings_dir, output_dir, emb_type,
 
     x = np.arange(len(ws_present))
 
-    def _bar_panel(ax, values_dict, title, y_label, y_fmt, y_lim=None):
+    def _bar_panel(ax, values_dict, panel_title, y_label, y_fmt, y_lim=None):
         vals = [values_dict.get(ws, 0.0) for ws in ws_present]
         bars = ax.bar(
             x, vals,
@@ -795,7 +965,7 @@ def make_task_discrimination_chart(embeddings_dir, output_dir, emb_type,
         ax.set_xticks(x)
         ax.set_xticklabels(ws_present, fontsize=10)
         ax.set_ylabel(y_label, fontsize=9)
-        ax.set_title(title, fontsize=11)
+        ax.set_title(panel_title, fontsize=11)
         if y_lim is None:
             ax.set_ylim(0, max(vals) * 1.3 + 1e-9)
         else:
@@ -821,13 +991,65 @@ def make_task_discrimination_chart(embeddings_dir, output_dir, emb_type,
                    "within-task instruction sensitivity",
                    "mean cosine distance  (1 − similarity)", "{:.5f}")
 
-    fig.suptitle(
-        f"{model_title}  ·  all tasks  ·  {emb_type}  task separation/discrimination",
-        fontsize=12,
-    )
+    fig.suptitle(title, fontsize=12)
     fig.tight_layout()
-    _save(fig, output_dir, f"all_tasks_{emb_type}_task_discrimination.png",
-          task_name="all_tasks")
+    _save(fig, output_dir, filename, task_name="all_tasks")
+
+
+def make_task_discrimination_chart(embeddings_dir, output_dir, emb_type,
+                                    suffix_to_label, model_title, file_suffixes=None) -> None:
+    """Bar chart of task separation, discrimination, and sensitivity per weight set.
+
+    Between-task separation
+      Let μ_t = mean embedding for task t in weight set ws.
+        separation(ws) = mean_{i≠j} (1 − cosine_sim(μ_i, μ_j))
+      Higher = more distinct task representations.
+
+    Between-task discrimination
+      Cosine silhouette score over individual embeddings, normalized to [0, 1].
+      For each embedding i:
+        a_i = mean cosine distance to other embeddings in the same task
+        b_i = mean cosine distance to embeddings in the nearest other task
+        s_i = (b_i − a_i) / max(a_i, b_i)
+        discrimination(ws) = (mean_i(s_i) + 1) / 2
+      Higher = task clusters are better separated relative to their internal spread.
+
+    Within-task instruction sensitivity
+      Let D_t(ws) = mean_{i≠j} (1 − cosine_sim(v_i^t, v_j^t))
+          where v_i^t are individual instruction embeddings for task t.
+        sensitivity(ws) = mean_t D_t(ws)
+      Higher = more sensitive to instruction rephrasing.
+    """
+    X, meta = collect_all_tasks_embeddings(embeddings_dir, emb_type,
+                                            suffix_to_label, file_suffixes)
+    if X is None or len(X) < 2:
+        print(f"  [task discrimination] not enough data"); return
+
+    _make_task_discrimination_chart_from_data(
+        X, meta, output_dir,
+        f"all_tasks_{emb_type}_task_discrimination.png",
+        f"{model_title}  ·  all tasks  ·  {emb_type}  task separation/discrimination",
+        TASK_ORDER,
+    )
+
+
+def make_checkpoint_group_discrimination_charts(embeddings_dir, output_dir, emb_type,
+                                                suffix_to_label, model_title,
+                                                file_suffixes=None) -> None:
+    """Task discrimination charts computed separately for each checkpoint group."""
+    for group_key, task_names, group_label in CHECKPOINT_TASK_GROUPS:
+        X, meta = collect_task_group_embeddings(embeddings_dir, task_names, emb_type,
+                                                suffix_to_label, file_suffixes)
+        if X is None or len(X) < 2:
+            print(f"  [task discrimination {group_key}] not enough data")
+            continue
+
+        _make_task_discrimination_chart_from_data(
+            X, meta, output_dir,
+            f"all_tasks_{emb_type}_{group_key}_task_discrimination.png",
+            f"{model_title}  ·  {group_label}  ·  {emb_type}  task separation/discrimination",
+            task_names,
+        )
 
 
 # ── Util ──────────────────────────────────────────────────────────────────────
@@ -938,6 +1160,8 @@ def main():
                                        emb_type, suffix_to_label, model_title, file_suffixes)
             make_all_tasks_pca_plot   (args.embeddings_dir, args.output_dir,
                                        emb_type, suffix_to_label, model_title, file_suffixes)
+            make_checkpoint_group_pca_plot(args.embeddings_dir, args.output_dir,
+                                           emb_type, suffix_to_label, model_title, file_suffixes)
             make_all_tasks_cosim_plot (args.embeddings_dir, args.output_dir,
                                        emb_type, suffix_to_label, model_title, file_suffixes)
             if file_suffixes is None:
@@ -945,8 +1169,14 @@ def main():
                 # weight sets present; restrict to the base+pretrained+cotrained run.
                 make_pairwise_pca_plot           (args.embeddings_dir, args.output_dir,
                                                   emb_type, suffix_to_label, model_title)
+                make_checkpoint_group_pairwise_pca_plot(
+                    args.embeddings_dir, args.output_dir,
+                    emb_type, suffix_to_label, model_title)
                 make_task_discrimination_chart   (args.embeddings_dir, args.output_dir,
                                                   emb_type, suffix_to_label, model_title)
+                make_checkpoint_group_discrimination_charts(
+                    args.embeddings_dir, args.output_dir,
+                    emb_type, suffix_to_label, model_title)
 
 
 if __name__ == "__main__":

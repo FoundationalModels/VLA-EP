@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build two summary tables and save them to visualizations/.
+"""Build summary tables and save them to visualizations/.
 
 Table 1 — summary_table.png  (original)
   Rows: comparison subsets (base+pretrained, pretrained+cotrained, …)
@@ -11,10 +11,21 @@ Table 2 — summary_pairwise_pca.png
   Cols: models (Pi0, OpenVLA, MiniVLA)
   Each cell is a 3-panel figure (base vs pre-trained | pre-trained vs co-trained
   | base vs co-trained) so one row conveys all three pairwise comparisons.
+
+Table 3 — summary_pairwise_pca_by_checkpoint.png
+  Rows: models (Pi0, OpenVLA, MiniVLA)
+  Single image column: pairwise PCA panels, independently fitted for the
+  carrot/knife and pot/plate co-trained checkpoint task groups.
+
+Table 4 — summary_discrimination_sensitivity_lines.png
+  Line plot of between-task discrimination and within-task instruction
+  sensitivity across base, pre-trained, and co-trained weight stages.
 """
 
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
+
+from make_discrimination_sensitivity_summary import main as make_line_summary
 
 VIZ_ROOT = Path("/home/hrilab/VLA-EP/visualizations")
 
@@ -31,6 +42,11 @@ PAIRWISE_PCA_PATTERNS = {
     "pi0":     "all_tasks_last_layer_pairwise_pca.png",
     "openvla": "all_tasks_layer-1_final_pairwise_pca.png",
     "minivla": "all_tasks_layer-1_final_pairwise_pca.png",
+}
+CHECKPOINT_GROUP_PCA_PATTERNS = {
+    "pi0":     "all_tasks_last_layer_checkpoint_group_pairwise_pca.png",
+    "openvla": "all_tasks_layer-1_final_checkpoint_group_pairwise_pca.png",
+    "minivla": "all_tasks_layer-1_final_checkpoint_group_pairwise_pca.png",
 }
 
 COMPARISONS = [
@@ -153,3 +169,43 @@ for row_idx, (model, label) in enumerate(zip(MODELS, MODEL_LABELS)):
 out2 = VIZ_ROOT / "summary_pairwise_pca.png"
 canvas2.save(out2, dpi=(150, 150))
 print(f"Saved → {out2}  ({total_w2} × {total_h2} px)")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Table 3 — checkpoint-group pairwise PCA: models as rows
+# ═══════════════════════════════════════════════════════════════════════════════
+
+CELL_W3 = 1800
+CELL_H3 = 950
+
+total_w3 = ROW_LABEL_W + CELL_W3 + 2 * PADDING
+total_h3 = COL_HEADER_H + len(MODELS) * (CELL_H3 + PADDING) + PADDING
+
+canvas3 = Image.new("RGB", (total_w3, total_h3), BG_COLOR)
+draw3   = ImageDraw.Draw(canvas3)
+
+draw3.rectangle([ROW_LABEL_W + PADDING, 0, total_w3, COL_HEADER_H], fill=HEADER_BG)
+_centered_text(draw3, "Pairwise PCA by checkpoint  (carrot/knife · pot/plate)",
+               _font_hdr, (ROW_LABEL_W + PADDING, 0, total_w3, COL_HEADER_H))
+draw3.rectangle([0, 0, ROW_LABEL_W, COL_HEADER_H], fill=HEADER_BG)
+
+for row_idx, (model, label) in enumerate(zip(MODELS, MODEL_LABELS)):
+    y = COL_HEADER_H + row_idx * (CELL_H3 + PADDING) + PADDING
+    draw3.rectangle([0, y, ROW_LABEL_W, y + CELL_H3], fill=LABEL_BG)
+    _centered_text(draw3, label, _font_hdr, (0, y, ROW_LABEL_W, y + CELL_H3))
+
+    x = ROW_LABEL_W + PADDING
+    img_path = (VIZ_ROOT / model / "base+pretrained+cotrained"
+                / "all_tasks" / CHECKPOINT_GROUP_PCA_PATTERNS[model])
+    _paste_or_placeholder(canvas3, draw3, img_path, x, y, CELL_W3, CELL_H3)
+
+out3 = VIZ_ROOT / "summary_pairwise_pca_by_checkpoint.png"
+canvas3.save(out3, dpi=(150, 150))
+print(f"Saved → {out3}  ({total_w3} × {total_h3} px)")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Table 4 — discrimination/sensitivity line summary
+# ═══════════════════════════════════════════════════════════════════════════════
+
+make_line_summary()
