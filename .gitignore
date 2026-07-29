@@ -5,6 +5,10 @@ checkpoints/*
 !checkpoints/.gitkeep
 embeddings/*
 !embeddings/.gitkeep
+archive
+
+# SLURM job logs
+logs/
 
 # Python-related ignores
 __pycache__/
