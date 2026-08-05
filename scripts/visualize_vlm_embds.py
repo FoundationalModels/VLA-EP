@@ -88,7 +88,8 @@ def _darken(hex_color: str, factor: float = 0.55) -> str:
 # never appear alongside the dinosiglip sets above — they share a space with each
 # other, not with them. They live in this same ordering only so the shared colour
 # and legend machinery covers them.
-WEIGHT_SET_ORDER = ["base", "Open-X", "bridge-pretrained", "ECoT-steerable", "ECoT-reasoner",
+WEIGHT_SET_ORDER = ["base", "Open-X", "Open-X+FT", "bridge-pretrained", "vqa-pretrained",
+                    "ECoT-steerable", "ECoT-reasoner",
                     "co-trained", "co-trained+VQA",
                     "OpenVLA-v0.1", "ECoT"]
 
@@ -102,7 +103,13 @@ WEIGHT_SET_DARKEN = {"co-trained+VQA": 0.55}
 WEIGHT_SET_COLORS = {
     "base":           (_fade(C_FT_BASE, 0.15),   _fade(C_FT_OTHER, 0.15)),
     "Open-X":         (_fade(C_FT_BASE, 0.35),   _fade(C_FT_OTHER, 0.35)),
+    # Standard OpenVLA (Open-X) fine-tuned in-domain on carrot/knife -- a
+    # different recipe from the bridge+sink co-trained checkpoint, same goal.
+    "Open-X+FT":      (_fade(C_FT_BASE, 0.45),   _fade(C_FT_OTHER, 0.45)),
     "bridge-pretrained":    (_fade(C_FT_BASE, 0.55),   _fade(C_FT_OTHER, 0.55)),
+    # bridge_llava_7b: the Bridge-stage parent of the VQA co-trained checkpoint,
+    # so the VQA arm has its own pre-training tier rather than borrowing Bridge's.
+    "vqa-pretrained":       (_fade(C_FT_BASE, 0.60),   _fade(C_FT_OTHER, 0.60)),
     "ECoT-steerable":      (_fade(C_FT_BASE, 0.75),   _fade(C_FT_OTHER, 0.75)),
     # Same fade as steerable: the two are siblings (identical base VLM, data,
     # LR, batch and step -- differing only in train_reasoner), so the rim colour
@@ -115,19 +122,19 @@ WEIGHT_SET_COLORS = {
     "ECoT":           (C_FT_BASE,                C_FT_OTHER),
 }
 
-WEIGHT_SET_ALPHA = {"base": 0.15, "Open-X": 0.35, "bridge-pretrained": 0.50,
+WEIGHT_SET_ALPHA = {"base": 0.15, "Open-X": 0.35, "Open-X+FT": 0.45, "bridge-pretrained": 0.50, "vqa-pretrained": 0.60,
                     "ECoT-steerable": 0.75, "ECoT-reasoner": 0.75,
                     "co-trained": 1.0, "co-trained+VQA": 1.0,
                     "OpenVLA-v0.1": 0.50, "ECoT": 1.0}
-WEIGHT_SET_SIZE  = {"base": 90,   "Open-X": 100, "bridge-pretrained": 110,
+WEIGHT_SET_SIZE  = {"base": 90,   "Open-X": 100, "Open-X+FT": 105, "bridge-pretrained": 110, "vqa-pretrained": 112,
                     "ECoT-steerable": 130, "ECoT-reasoner": 130,
                     "co-trained": 150, "co-trained+VQA": 175,
                     "OpenVLA-v0.1": 110, "ECoT": 150}
-WEIGHT_SET_ZORD  = {"base": 1,    "Open-X": 2,   "bridge-pretrained": 2,
+WEIGHT_SET_ZORD  = {"base": 1,    "Open-X": 2,   "Open-X+FT": 2, "bridge-pretrained": 2, "vqa-pretrained": 2,
                     "ECoT-steerable": 2, "ECoT-reasoner": 2,
                     "co-trained": 3, "co-trained+VQA": 4,
                     "OpenVLA-v0.1": 2, "ECoT": 3}
-WS_ABBREV        = {"base": "base", "Open-X": "OXE", "bridge-pretrained": "PT",
+WS_ABBREV        = {"base": "base", "Open-X": "OXE", "Open-X+FT": "OXE-FT", "bridge-pretrained": "PT", "vqa-pretrained": "VQA-PT",
                     "ECoT-steerable": "STEER", "ECoT-reasoner": "REASON", "co-trained": "CT",
                     "co-trained+VQA": "CT+VQA",
                     "OpenVLA-v0.1": "v01", "ECoT": "ECoT"}
@@ -142,6 +149,8 @@ WEIGHT_SET_EDGE = {
     "ECoT-steerable":      ("#d95f02", 1.6),
     "ECoT-reasoner":       ("#e7298a", 1.6),
     "Open-X":         ("#1b9e77", 1.6),
+    "Open-X+FT":      ("#66a61e", 1.6),
+    "vqa-pretrained": ("#e6ab02", 1.6),
     "ECoT":           ("#7570b3", 1.6),
 }
 _DEFAULT_EDGE = ("#555555", 0.6)
@@ -150,7 +159,7 @@ _DEFAULT_EDGE = ("#555555", 0.6)
 # task and only the weight-set ordering needs conveying.
 WS_LEGEND_SHADE = {"co-trained+VQA": "#222", "co-trained": "#666",
                    "ECoT-steerable": "#888", "ECoT-reasoner": "#777", "bridge-pretrained": "#aaa",
-                   "Open-X": "#bbb", "base": "#ccc",
+                   "Open-X": "#bbb", "Open-X+FT": "#b0b0b0", "vqa-pretrained": "#a5a5a5", "base": "#ccc",
                    "ECoT": "#666", "OpenVLA-v0.1": "#aaa"}
 
 
@@ -248,7 +257,7 @@ def emb_type_label(emb_type: str) -> str:
 
 
 ALL_SUFFIXES = ("_basevlm_embds", "_openx_embds", "_pretrained_embds",
-                "_pi0pretrained_embds", "_steerable_embds", "_reasoner_embds",
+                "_oxeft_embds", "_vqapretrain_embds", "_pi0pretrained_embds", "_steerable_embds", "_reasoner_embds",
                 "_finetuned_embds", "_vqafinetuned_embds", "_ecot_embds")
 
 
@@ -887,6 +896,14 @@ _PAIRS = [
     # direct contrast against plain co-training.
     ("bridge-pretrained", "co-trained+VQA"),
     ("co-trained",  "co-trained+VQA"),
+    # The VQA arm's own pre-training stage, and its own PT -> FT step. With these
+    # the VQA effect decomposes into what pre-training did and what co-training did,
+    # instead of being confounded with a different parent checkpoint.
+    ("bridge-pretrained", "vqa-pretrained"),
+    ("vqa-pretrained",    "co-trained+VQA"),
+    # In-domain fine-tuning from the Open-X generalist vs from Bridge.
+    ("Open-X",      "Open-X+FT"),
+    ("Open-X+FT",   "co-trained"),
     # Steerable policy vs our bridge-pretrained checkpoint — both bridge-trained
     # from the same base VLM, so this isolates the training recipe.
     ("bridge-pretrained", "ECoT-steerable"),
@@ -1259,6 +1276,8 @@ MODEL_DEFAULTS = {
             "_basevlm_embds":      "base",           # Prismatic VLM (pre-robot)
             "_pretrained_embds":   "bridge-pretrained",    # OpenVLA trained on Open-X
             "_openx_embds":        "Open-X",         # official openvla/openvla-7b release
+            "_oxeft_embds":        "Open-X+FT",      # Open-X release fine-tuned on carrot/knife
+            "_vqapretrain_embds":  "vqa-pretrained", # bridge_llava_7b: parent of the VQA co-trained ckpt
             "_steerable_embds":    "ECoT-steerable",      # Embodied-CoT steerable policy (bridge)
             "_reasoner_embds":     "ECoT-reasoner",       # Embodied-CoT embodied-reasoner (train_reasoner)
             "_finetuned_embds":    "co-trained",     # fine-tuned checkpoint

@@ -6,6 +6,7 @@ checkpoints/*
 embeddings/*
 !embeddings/.gitkeep
 archive
+workshop-paper
 
 # SLURM job logs
 logs/
@@ -17,3 +18,5 @@ rite
 # IDE files
 .vscode/
 VLA-EP.code-workspace 
+
+status_update_slides.md

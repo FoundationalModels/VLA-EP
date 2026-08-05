@@ -95,6 +95,13 @@ OPENX_MODEL_DIR="$CKPT_DIR/hf/openvla-7b-full"
 # Embodied-CoT embodied-reasoner: same base VLM, Bridge V2 data, LR, batch and
 # step as the steerable checkpoint above, differing only in train_reasoner: true.
 REASONER_CHECKPOINT="$CKPT_DIR/openvla_reasoner_bridge_step-080000-epoch-09-loss=0.0408.pt"
+# Standard OpenVLA (Open-X release) fine-tuned in-domain on carrot/knife. Same
+# Prismatic .pt layout as the rest, stored bf16 rather than fp32.
+OXEFT_CHECKPOINT="$CKPT_DIR/openvla_oxe+carrot-knife.pt"
+# bridge_llava_7b -- the Bridge-stage checkpoint the VQA co-trained model was
+# fine-tuned from. Its presence de-confounds the VQA comparison, which until now
+# had to borrow the plain Bridge checkpoint as its baseline.
+VQAPRETRAIN_CHECKPOINT="$CKPT_DIR/openvla_vqa_pretrain_step-200000-epoch-09-loss%3D0.2419-bf16.pt"
 HF_TOKEN_PATH=""
 
 usage() {
@@ -114,6 +121,8 @@ while [[ $# -gt 0 ]]; do
         --steerable_checkpoint)        STEERABLE_CHECKPOINT="$2";        shift 2 ;;
         --openx_model_dir)             OPENX_MODEL_DIR="$2";             shift 2 ;;
         --reasoner_checkpoint)         REASONER_CHECKPOINT="$2";         shift 2 ;;
+        --oxeft_checkpoint)            OXEFT_CHECKPOINT="$2";            shift 2 ;;
+        --vqa_pretrain_checkpoint)     VQAPRETRAIN_CHECKPOINT="$2";      shift 2 ;;
         --hf_token)                    HF_TOKEN_PATH="$2";               shift 2 ;;
         --output_dir)                  OUTPUT_DIR="$2";                  shift 2 ;;
         -h|--help) usage ;;
@@ -154,6 +163,8 @@ POT_PLATE_VQA_CHECKPOINT="$(abspath "$POT_PLATE_VQA_CHECKPOINT")"
 STEERABLE_CHECKPOINT="$(abspath "$STEERABLE_CHECKPOINT")"
 OPENX_MODEL_DIR="$(abspath "$OPENX_MODEL_DIR")"
 REASONER_CHECKPOINT="$(abspath "$REASONER_CHECKPOINT")"
+OXEFT_CHECKPOINT="$(abspath "$OXEFT_CHECKPOINT")"
+VQAPRETRAIN_CHECKPOINT="$(abspath "$VQAPRETRAIN_CHECKPOINT")"
 [[ -d "$PRETRAINED_MODEL_PATH" ]] && PRETRAINED_MODEL_PATH="$(realpath "$PRETRAINED_MODEL_PATH")"
 
 echo "============================================"
@@ -168,6 +179,8 @@ echo "  pot/plate    co-trained+VQA : ${POT_PLATE_VQA_CHECKPOINT:-(skipped)}"
 echo "  steerable (all tasks)       : ${STEERABLE_CHECKPOINT:-(skipped)}"
 echo "  Open-X openvla-7b (all)     : ${OPENX_MODEL_DIR:-(skipped)}"
 echo "  reasoner (all tasks)        : ${REASONER_CHECKPOINT:-(skipped)}"
+echo "  Open-X + carrot/knife FT    : ${OXEFT_CHECKPOINT:-(skipped)}"
+echo "  Bridge+VQA pretrained       : ${VQAPRETRAIN_CHECKPOINT:-(skipped)}"
 echo "  ref_exp                     : $REF_EXP_PATH"
 echo "  images from                 : $IMAGE_BASE_DIR"
 echo "  output dir                  : $OUTPUT_DIR"
@@ -214,6 +227,8 @@ run_group() {
     [[ -n "$STEERABLE_CHECKPOINT" ]] && extras+=("steerable=$STEERABLE_CHECKPOINT")
     [[ -n "$OPENX_MODEL_DIR"      ]] && extras+=("openx=$OPENX_MODEL_DIR")
     [[ -n "$REASONER_CHECKPOINT"  ]] && extras+=("reasoner=$REASONER_CHECKPOINT")
+    [[ -n "$OXEFT_CHECKPOINT"     ]] && extras+=("oxeft=$OXEFT_CHECKPOINT")
+    [[ -n "$VQAPRETRAIN_CHECKPOINT" ]] && extras+=("vqapretrain=$VQAPRETRAIN_CHECKPOINT")
     if [[ ${#extras[@]} -gt 0 ]]; then
         group_args+=(--extra_checkpoints "${extras[@]}")
     fi

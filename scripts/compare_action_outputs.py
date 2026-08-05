@@ -122,11 +122,24 @@ def main():
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--actions_dir", default=os.path.join(REPO, "visualizations", "actions"))
     p.add_argument("--output_dir", default=os.path.join(REPO, "visualizations", "actions"))
+    p.add_argument("--override", nargs="+", default=None, metavar="NAME=PATH",
+                   help="Replace a checkpoint's source file. Needed for reasoning "
+                        "checkpoints: the default capture appends the empty token, which "
+                        "suppresses the reasoning chain, so it measures the action the "
+                        "model takes WITHOUT reasoning -- not the action it would "
+                        "actually execute. Point those at the language-capture file, "
+                        "whose trailing 7 tokens are the post-reasoning action.")
     args = p.parse_args()
 
     files = {}
     for fp in glob.glob(os.path.join(args.actions_dir, "*_language.json")):
         files[os.path.basename(fp)[: -len("_language.json")]] = json.load(open(fp))
+    for spec in args.override or []:
+        name, sep, path = spec.partition("=")
+        if not sep:
+            raise SystemExit(f"--override entry must be NAME=PATH, got {spec!r}")
+        files[name] = json.load(open(path))
+        print(f"  [override] {name} <- {path}")
     if not files:
         raise SystemExit(f"No *_language.json in {args.actions_dir} -- run the capture first.")
 
